@@ -1,0 +1,90 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/5/CPU.hdl
+/**
+ * The Hack Central Processing unit (CPU).
+ * Parses the binary code in the instruction input and executes it according to the
+ * Hack machine language specification. In the case of a C-instruction, computes the
+ * function specified by the instruction. If the instruction specifies to read a memory
+ * value, the inM input is expected to contain this value. If the instruction specifies
+ * to write a value to the memory, sets the outM output to this value, sets the addressM
+ * output to the target address, and asserts the writeM output (when writeM = 0, any
+ * value may appear in outM).
+ * If the reset input is 0, computes the address of the next instruction and sets the
+ * pc output to that value. If the reset input is 1, sets pc to 0.
+ * Note: The outM and writeM outputs are combinational: they are affected by the
+ * instruction's execution during the current cycle. The addressM and pc outputs are
+ * clocked: although they are affected by the instruction's execution, they commit to
+ * their new values only in the next cycle.
+ */
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+    // decode instruction
+    Not(in=instruction[15] , out=opA);
+    Not(in=opA , out=opC);
+
+    And(a=instruction[5] , b=opC, out=writeA);
+    And(a=instruction[4] , b=opC, out=writeD);
+    And(a=instruction[3] , b=opC, out=writeM);
+
+    Or(a=opA, b=writeA , out=loadA);
+
+    Mux16(a=outA , b=instruction , sel=opA , out=dec1);
+    ARegister(in=dec1 , load=loadA, out = registerA,out[0..14] = addressM);
+
+    // Program counter
+    Or(a=zr , b=ng , out=notgt);
+    Mux(a=instruction[0] , b=false , sel=notgt , out=jgt);
+    And(a=instruction[1] , b=zr , out=jeq);
+    And(a=instruction[2], b=ng,out=jlt);
+
+    Or(a=jgt,b=jeq,out=jmp1);
+    Or(a=jmp1,b=jlt,out=jmp2);
+    And(a=jmp2, b=opC, out=opJmp);
+    PC(in=registerA , load=opJmp , inc=true , reset=reset , out[0..14]=pc);
+
+    
+    // select registerA or M
+    And(a=opC , b=instruction[12] , out=loadM);
+    Mux16(a=registerA , b=inM , sel=loadM , out=mem);
+
+    // ALU
+    DRegister(in=outD , load=writeD , out=registerD);
+    And(a=instruction[11] , b=opC , out=opZX);
+    And(a=instruction[10] , b=opC , out=opNX);
+    And(a=instruction[9] , b=opC , out=opZY);
+    And(a=instruction[8] , b=opC , out=opNY);
+    And(a=instruction[7] , b=opC , out=opF);
+    And(a=instruction[6] , b=opC , out=opNO);
+    ALU(
+        x=registerD ,
+        y=mem ,
+        zx=opZX , 
+        nx=opNX , 
+        zy=opZY , 
+        ny=opNY , 
+        f=opF , 
+        no=opNO , 
+        out=outM, 
+        out=outD, 
+        out=outA,
+        zr=zr , 
+        ng=ng);
+    
+
+
+	//// Replace this comment with your code.
+}
