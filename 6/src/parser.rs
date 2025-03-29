@@ -14,8 +14,7 @@ pub enum InstructionType {
 pub struct Parser {
     source: String,
     pos: RefCell<usize>,
-    // has called advance()?
-    has_advance: bool,
+    instruction_count: usize,
 }
 
 impl Parser {
@@ -23,15 +22,15 @@ impl Parser {
         Self {
             source: source.to_owned(),
             pos: RefCell::new(0),
-            has_advance: false,
+            instruction_count: 0,
         }
     }
 
     pub fn has_more_lines(&self) -> bool {
         let s = self.get_rest();
-        let skip = if self.has_advance { 1 } else { 0 };
+        let skip = if self.has_advance() { 1 } else { 0 };
         for line in s.split("\n").skip(skip).map(remove_head_space) {
-            if !is_comment(s) && !line.is_empty() {
+            if !is_comment(line) && !line.is_empty() {
                 return true;
             }
         }
@@ -39,14 +38,16 @@ impl Parser {
     }
 
     pub fn advance(&mut self) {
+        let mut has_before = false;
         loop {
             let line = self.peek_line();
             let trimmed = remove_head_space(line);
             if is_comment(trimmed) || trimmed.is_empty() {
                 *self.pos.borrow_mut() += line.len() + 1;
+                has_before = true;
                 continue;
             }
-            if self.has_advance {
+            if self.has_advance() && !has_before {
                 *self.pos.borrow_mut() += line.len() + 1;
             }
 
@@ -56,11 +57,16 @@ impl Parser {
             }
         }
 
-        self.has_advance = true;
+        match self.instruction_type() {
+            InstructionType::InstA | InstructionType::InstC => {
+                self.instruction_count += 1;
+            }
+            _ => {}
+        };
     }
 
     pub fn instruction_type(&self) -> InstructionType {
-        let l = self.peek_line();
+        let l = remove_head_space(self.peek_line());
 
         if l.starts_with("@") {
             InstructionType::InstA
@@ -72,7 +78,7 @@ impl Parser {
     }
 
     pub fn symbol(&self) -> &str {
-        let line = self.peek_line();
+        let line = remove_head_space(self.peek_line());
         let inst = self.instruction_type();
         match inst {
             InstructionType::InstA => {
@@ -88,7 +94,7 @@ impl Parser {
     }
 
     pub fn dest(&self) -> &str {
-        let line = self.peek_line();
+        let line = remove_head_space(self.peek_line());
         let inst = self.instruction_type();
         match inst {
             InstructionType::InstC => {
@@ -103,7 +109,7 @@ impl Parser {
     }
 
     pub fn comp(&self) -> &str {
-        let line = self.peek_line();
+        let line = remove_head_space(self.peek_line());
         let inst = self.instruction_type();
         match inst {
             InstructionType::InstC => {
@@ -122,7 +128,7 @@ impl Parser {
     }
 
     pub fn jump(&self) -> &str {
-        let line = self.peek_line();
+        let line = remove_head_space(self.peek_line());
         let inst = self.instruction_type();
         match inst {
             InstructionType::InstC => {
@@ -136,19 +142,36 @@ impl Parser {
         }
     }
 
-    fn get_rest(&self) -> &str {
-        let p = *self.pos.borrow();
-        &self.source[p..]
+    pub(crate) fn reset(&mut self) {
+        self.instruction_count = 0;
+        *self.pos.borrow_mut() = 0;
     }
 
-    fn peek_line(&self) -> &str {
+    pub(crate) fn row(&self) -> usize {
+        self.instruction_count
+    }
+
+    fn has_advance(&self) -> bool {
+        self.instruction_count > 0
+    }
+
+    fn get_rest(&self) -> &str {
+        let p = *self.pos.borrow();
+        if p < self.source.len() {
+            &self.source[p..]
+        } else {
+            ""
+        }
+    }
+
+    pub(crate) fn peek_line(&self) -> &str {
         let s = self.get_rest();
         let l = if let Some(end) = s.find("\n") {
             &s[..end]
         } else {
             s
         };
-        remove_head_space(l)
+        l
     }
 }
 

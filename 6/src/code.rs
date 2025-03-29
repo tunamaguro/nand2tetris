@@ -8,11 +8,14 @@ pub enum CodeGenError {
 }
 
 pub fn dest(s: &str) -> Result<&str, CodeGenError> {
+    dbg!(s);
+
     let bin = match clean_str(s) {
         "" => "000",
         "M" => "001",
         "D" => "010",
         "DM" => "011",
+        "MD" => "011",
         "A" => "100",
         "AM" => "101",
         "AD" => "110",
