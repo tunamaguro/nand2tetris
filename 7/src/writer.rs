@@ -153,23 +153,13 @@ impl<W: std::io::Write> CodeWriter<W> {
         match command.kind {
             PushPop::Pop => {
                 // セグメントの書き込み先アドレスをR13に保存
-                let addr = self.segment_addr(&command.segment, command.index);
-                self.write_line(addr)?;
-                // local, argument, this, that の場合はindexの分だけずらす
-                match command.segment {
-                    Segment::Local | Segment::Argument | Segment::This | Segment::That => {
-                        self.write_line("D=A")?;
-                        self.write_line(format!("@{}", command.index))?;
-                        self.write_line("A=D+A")?;
-                    }
-                    _ => {}
-                }
-                self.write_line("D=M")?;
+                self.set_segment_addr(&command.segment, command.index)?;
+                self.write_line("D=A")?;
                 self.write_line("@R13")?;
                 self.write_line("M=D")?;
 
                 // Dレジスタにスタックのトップの値を保存
-                self.write_line("@SP")?;
+                self.backward_stack()?;
                 self.write_line("D=M")?;
 
                 // R13に保存したアドレスにDレジスタの値を書き込む
@@ -177,7 +167,6 @@ impl<W: std::io::Write> CodeWriter<W> {
                 self.write_line("A=M")?;
                 self.write_line("M=D")?;
 
-                self.backward_stack()?;
             }
             PushPop::Push => {
                 // Dレジスタにセグメントの値を読み込む
@@ -187,23 +176,12 @@ impl<W: std::io::Write> CodeWriter<W> {
                         self.write_line("D=A")?;
                     }
                     _ => {
-                        let addr = self.segment_addr(&command.segment, command.index);
-                        self.write_line(addr)?;
-
-                        // local, argument, this, that の場合はindexの分だけずらす
-                        match command.segment {
-                            Segment::Local | Segment::Argument | Segment::This | Segment::That => {
-                                self.write_line("D=A")?;
-                                self.write_line(format!("@{}", command.index))?;
-                                self.write_line("A=D+A")?;
-                            }
-                            _ => {}
-                        }
+                        self.set_segment_addr(&command.segment, command.index)?;
                         self.write_line("D=M")?;
                     }
                 }
-                self.write_line("@SP")?;
-                self.write_line("A=M")?;
+                
+                self.set_stack_top()?;
                 self.write_line("M=D")?;
                 self.advance_stack()?;
             }
@@ -212,13 +190,14 @@ impl<W: std::io::Write> CodeWriter<W> {
         Ok(())
     }
 
-    fn segment_addr(&self, segment: &Segment, index: u16) -> String {
-        match segment {
+    /// 指定されたセグメントを指すようにAレジスタを設定する
+    fn set_segment_addr(&mut self, segment: &Segment, index: u16) -> std::io::Result<()> {
+        let addr = match segment {
             Segment::Local => format!("@LCL"),
             Segment::Argument => format!("@ARG"),
             Segment::This => format!("@THIS"),
             Segment::That => format!("@THAT"),
-            Segment::Constant => unreachable!("Constant segment should not be used for address"),
+            Segment::Constant => unreachable!("Constant segment can not be used for address"),
             Segment::Static => {
                 if index > 240 {
                     panic!("Static segment index out of bounds: {}", index);
@@ -238,10 +217,25 @@ impl<W: std::io::Write> CodeWriter<W> {
                     "@THAT".to_string()
                 }
             }
+        };
+
+        self.write_line(addr)?;
+
+        // local, argument, this, that の場合はindexの分だけずらす
+        match segment {
+            Segment::Local | Segment::Argument | Segment::This | Segment::That => {
+                self.write_line("D=M")?;
+                self.write_line(format!("@{}", index))?;
+                self.write_line("A=D+A")?;
+            }
+            _ => {}
         }
+
+        // Aレジスタがセグメントを指す
+        Ok(())
     }
 
-    // スタックのトップをAレジスタに設定する
+    /// スタックのトップをAレジスタに設定する
     fn set_stack_top(&mut self) -> std::io::Result<()> {
         self.write_line("@SP")?;
         self.write_line("A=M")?;
