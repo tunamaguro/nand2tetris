@@ -3,11 +3,16 @@ use super::{ArithmeticCommand, PushPop, PushPopCommand, Segment};
 pub struct CodeWriter<W> {
     output: W,
     ident: String,
+    jmp_count: u16,
 }
 
 impl<W: std::io::Write> CodeWriter<W> {
     pub fn new(output: W, ident: String) -> Self {
-        CodeWriter { output, ident }
+        CodeWriter {
+            output,
+            ident,
+            jmp_count: 0,
+        }
     }
 
     pub fn init(&mut self) -> std::io::Result<()> {
@@ -47,16 +52,79 @@ impl<W: std::io::Write> CodeWriter<W> {
                 self.write_line("D=M-D")?;
             }
             ArithmeticCommand::Eq => {
-                self.write_line("// OP EQ")?;
-                todo!();
+                // X がMレジスタに入る
+                self.backward_stack()?;
+                self.write_line("D=M-D")?; // x - y
+                let cnt = self.increment_jmp_count();
+                let when_true = format!("EQ_TRUE_{}", cnt);
+                let end = format!("EQ_END_{}", cnt);
+
+                // Dレジスタの値が0ならばEQ_TRUEにジャンプ
+                self.write_line(format!("@{}", when_true))?;
+                self.write_line("D;JEQ")?;
+
+                // Dレジスタの値が0でなければDレジスタに0をセット
+                self.write_line("D=0")?;
+                self.write_line(format!("@{}", end))?;
+                self.write_line("0;JMP")?;
+
+                // EQ_TRUEにジャンプした場合の処理(-1は補数で11111111)
+                self.write_line(format!("({})", when_true))?;
+                self.write_line("D=-1")?;
+
+                // EQ_ENDにジャンプ
+                self.write_line(format!("({})", end))?;
+                self.set_stack_top()?;
             }
             ArithmeticCommand::Gt => {
-                self.write_line("// OP GT")?;
-                todo!();
+                // X がMレジスタに入る
+                self.backward_stack()?;
+                self.write_line("D=M-D")?; // x - y
+                let cnt = self.increment_jmp_count();
+                let when_true = format!("GT_TRUE_{}", cnt);
+                let end = format!("GT_END_{}", cnt);
+
+                // Dレジスタの値が0より大きいならばGT_TRUEにジャンプ
+                self.write_line(format!("@{}", when_true))?;
+                self.write_line("D;JGT")?;
+
+                // Dレジスタの値が0以下ならDレジスタに0をセット
+                self.write_line("D=0")?;
+                self.write_line(format!("@{}", end))?;
+                self.write_line("0;JMP")?;
+
+                // GT_TRUEにジャンプした場合の処理(-1は補数で11111111)
+                self.write_line(format!("({})", when_true))?;
+                self.write_line("D=-1")?;
+
+                // GT_ENDにジャンプ
+                self.write_line(format!("({})", end))?;
+                self.set_stack_top()?;
             }
             ArithmeticCommand::Lt => {
-                self.write_line("// OP LT")?;
-                todo!();
+                // X がMレジスタに入る
+                self.backward_stack()?;
+                self.write_line("D=M-D")?; // x - y
+                let cnt = self.increment_jmp_count();
+                let when_true = format!("LT_TRUE_{}", cnt);
+                let end = format!("LT_END_{}", cnt);
+
+                // Dレジスタの値が0より小さいならばLT_TRUEにジャンプ
+                self.write_line(format!("@{}", when_true))?;
+                self.write_line("D;JLT")?;
+
+                // Dレジスタの値が0以上ならDレジスタに0をセット
+                self.write_line("D=0")?;
+                self.write_line(format!("@{}", end))?;
+                self.write_line("0;JMP")?;
+
+                // LT_TRUEにジャンプした場合の処理(-1は補数で11111111)
+                self.write_line(format!("({})", when_true))?;
+                self.write_line("D=-1")?;
+
+                // LT_ENDにジャンプ
+                self.write_line(format!("({})", end))?;
+                self.set_stack_top()?;
             }
             ArithmeticCommand::Neg => {
                 self.write_line("D=-M")?;
@@ -173,6 +241,13 @@ impl<W: std::io::Write> CodeWriter<W> {
         }
     }
 
+    // スタックのトップをAレジスタに設定する
+    fn set_stack_top(&mut self) -> std::io::Result<()> {
+        self.write_line("@SP")?;
+        self.write_line("A=M")?;
+        Ok(())
+    }
+
     /// スタックポインタを1増やし、Aレジスタをスタックのトップに設定する
     fn advance_stack(&mut self) -> std::io::Result<()> {
         self.write_line("@SP")?;
@@ -187,6 +262,12 @@ impl<W: std::io::Write> CodeWriter<W> {
         self.write_line("M=M-1")?;
         self.write_line("A=M")?;
         Ok(())
+    }
+
+    fn increment_jmp_count(&mut self) -> u16 {
+        let count = self.jmp_count;
+        self.jmp_count += 1;
+        count
     }
 
     fn write_line<S: AsRef<str>>(&mut self, code: S) -> std::io::Result<()> {
