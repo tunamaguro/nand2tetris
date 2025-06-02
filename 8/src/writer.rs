@@ -3,6 +3,7 @@ use super::{ArithmeticCommand, PushPop, PushPopCommand, Segment};
 pub struct CodeWriter<W> {
     output: W,
     ident: String,
+    function_names: Vec<String>,
     jmp_count: u16,
 }
 
@@ -11,7 +12,21 @@ impl<W: std::io::Write> CodeWriter<W> {
         CodeWriter {
             output,
             ident,
+            function_names: Vec::new(),
             jmp_count: 0,
+        }
+    }
+
+    pub fn set_ident(&mut self, ident: String) {
+        self.ident = ident;
+        self.jmp_count = 0; // Reset jump count when identifier changes
+    }
+
+    fn function_name(&self) -> String {
+        if let Some(name) = self.function_names.last() {
+            format!("{}.{}", self.ident, name)
+        } else {
+            self.ident.clone()
         }
     }
 
@@ -190,15 +205,22 @@ impl<W: std::io::Write> CodeWriter<W> {
     }
 
     pub(crate) fn write_label(&mut self, label: &str) -> std::io::Result<()> {
-        todo!()
+        writeln!(self.output, "({}.{})", self.function_name(), label)?;
+        Ok(())
     }
 
     pub(crate) fn write_goto(&mut self, label: &str) -> std::io::Result<()> {
-        todo!()
+        writeln!(self.output, "@{}.{}", self.function_name(), label)?;
+        writeln!(self.output, "0;JMP")?;
+        Ok(())
     }
 
     pub(crate) fn write_if_goto(&mut self, label: &str) -> std::io::Result<()> {
-        todo!()
+        self.backward_stack()?;
+        writeln!(self.output, "D=M")?;
+        writeln!(self.output, "@{}.{}", self.function_name(), label)?;
+        writeln!(self.output, "D;JNE")?;
+        Ok(())
     }
 
     pub(crate) fn write_function(&mut self, name: &str, n_args: u16) -> std::io::Result<()> {
@@ -285,9 +307,5 @@ impl<W: std::io::Write> CodeWriter<W> {
         let count = self.jmp_count;
         self.jmp_count += 1;
         count
-    }
-
-    fn write_line<S: AsRef<str>>(&mut self, code: S) -> std::io::Result<()> {
-        writeln!(self.output, "{}", code.as_ref())
     }
 }

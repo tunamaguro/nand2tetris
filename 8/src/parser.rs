@@ -39,7 +39,7 @@ impl Parsable for Command {
             .or_else(|| parse_call(line))
             .or_else(|| parse_return(line))
             .or_else(|| parse_jump(line))
-            }
+    }
 }
 
 fn parse_jump(line: &str) -> Option<Command> {
@@ -48,7 +48,7 @@ fn parse_jump(line: &str) -> Option<Command> {
 
     let tag = parts.next()?;
     let second_part = parts.next()?;
-    if parts.next().is_some() {
+    if parts.next().map(is_not_comment).unwrap_or(false) {
         return None; // Ensure no extra parts are present
     }
 
@@ -69,7 +69,7 @@ fn parse_function(line: &str) -> Option<Command> {
 
     let name = parts.next()?;
     let n_args = parts.next()?.parse::<u16>().ok()?;
-    if parts.next().is_some() {
+    if parts.next().map(is_not_comment).unwrap_or(false) {
         return None; // Ensure no extra parts are present
     }
     Some(Command::Function {
@@ -87,7 +87,7 @@ fn parse_call(line: &str) -> Option<Command> {
 
     let name = parts.next()?;
     let n_args = parts.next()?.parse::<u16>().ok()?;
-    if parts.next().is_some() {
+    if parts.next().map(is_not_comment).unwrap_or(false) {
         return None; // Ensure no extra parts are present
     }
     Some(Command::Call {
@@ -97,17 +97,39 @@ fn parse_call(line: &str) -> Option<Command> {
 }
 
 fn parse_return(line: &str) -> Option<Command> {
-    if line.trim() == "return" {
-        Some(Command::Return)
+    let mut parts = line.trim().split_whitespace();
+    let return_tag = parts.next()?;
+    if return_tag != "return" {
+        return None; // Ensure the command is a return declaration
+    }
+    if parts.next().map(is_not_comment).unwrap_or(false) {
+        return None; // Ensure no extra parts are present
+    }
+
+    Some(Command::Return)
+}
+
+fn parse_comment(line: &str) -> Option<&str> {
+    if let Some((_first, rest)) = line.trim().split_once("//") {
+        Some(rest)
     } else {
         None
     }
 }
 
+fn is_not_comment(line: &str) -> bool {
+    !line.trim().is_empty() && parse_comment(line).is_none()
+}
+
 impl Parsable for ArithmeticCommand {
     type Output = Self;
     fn parse(line: &str) -> Option<Self::Output> {
-        match line.trim() {
+        let mut parts = line.trim().split_whitespace();
+        let command = parts.next()?;
+        if parts.next().map(is_not_comment).unwrap_or(false) {
+            return None; // Ensure no extra parts are present
+        }
+        match command {
             "add" => Some(ArithmeticCommand::Add),
             "sub" => Some(ArithmeticCommand::Sub),
             "neg" => Some(ArithmeticCommand::Neg),
@@ -130,7 +152,7 @@ impl Parsable for PushPopCommand {
         let kind = parts.next().and_then(|s| PushPop::parse(s))?;
         let segment = parts.next().and_then(|s| Segment::parse(s))?;
         let index = parts.next().and_then(|s| s.parse::<u16>().ok())?;
-        if parts.next().is_some() {
+        if parts.next().map(is_not_comment).unwrap_or(false) {
             return None; // Ensure no extra parts are present
         }
 
