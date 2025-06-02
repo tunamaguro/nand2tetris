@@ -32,12 +32,74 @@ pub trait Parsable: Sized {
 impl Parsable for Command {
     type Output = Self;
     fn parse(line: &str) -> Option<Self::Output> {
-        if let Some(push_pop_command) = PushPopCommand::parse(line) {
-            return Some(Command::PushPop(push_pop_command));
-        }
-        if let Some(arithmetic_command) = ArithmeticCommand::parse(line) {
-            return Some(Command::Arithmetic(arithmetic_command));
-        }
+        PushPopCommand::parse(line)
+            .map(Command::PushPop)
+            .or_else(|| ArithmeticCommand::parse(line).map(Command::Arithmetic))
+            .or_else(|| parse_function(line))
+            .or_else(|| parse_call(line))
+            .or_else(|| parse_return(line))
+            .or_else(|| parse_jump(line))
+            }
+}
+
+fn parse_jump(line: &str) -> Option<Command> {
+    let line = line.trim();
+    let mut parts = line.split_whitespace();
+
+    let tag = parts.next()?;
+    let second_part = parts.next()?;
+    if parts.next().is_some() {
+        return None; // Ensure no extra parts are present
+    }
+
+    match tag {
+        "label" => Some(Command::Label(second_part.to_string())),
+        "goto" => Some(Command::GoTo(second_part.to_string())),
+        "if-goto" => Some(Command::IfGoTo(second_part.to_string())),
+        _ => None,
+    }
+}
+
+fn parse_function(line: &str) -> Option<Command> {
+    let mut parts = line.trim().split_whitespace();
+    let func_tag = parts.next()?;
+    if func_tag != "function" {
+        return None; // Ensure the command is a function declaration
+    }
+
+    let name = parts.next()?;
+    let n_args = parts.next()?.parse::<u16>().ok()?;
+    if parts.next().is_some() {
+        return None; // Ensure no extra parts are present
+    }
+    Some(Command::Function {
+        name: name.to_string(),
+        n_args,
+    })
+}
+
+fn parse_call(line: &str) -> Option<Command> {
+    let mut parts = line.trim().split_whitespace();
+    let call_tag = parts.next()?;
+    if call_tag != "call" {
+        return None; // Ensure the command is a call declaration
+    }
+
+    let name = parts.next()?;
+    let n_args = parts.next()?.parse::<u16>().ok()?;
+    if parts.next().is_some() {
+        return None; // Ensure no extra parts are present
+    }
+    Some(Command::Call {
+        name: name.to_string(),
+        n_args,
+    })
+}
+
+fn parse_return(line: &str) -> Option<Command> {
+    if line.trim() == "return" {
+        Some(Command::Return)
+    } else {
         None
     }
 }

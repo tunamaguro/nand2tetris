@@ -25,6 +25,16 @@ impl<W: std::io::Write> VmTranslator<W> {
                     Command::Arithmetic(arithmetic_command) => {
                         self.writer.write_arithmetic(&arithmetic_command)?;
                     }
+                    Command::Label(label) => {
+                        self.writer.write_label(&label)?;
+                    }
+                    Command::GoTo(label) => self.writer.write_goto(&label)?,
+                    Command::IfGoTo(label) => self.writer.write_if_goto(&label)?,
+                    Command::Function { name, n_args } => {
+                        self.writer.write_function(&name, n_args)?
+                    }
+                    Command::Call { name, n_args } => self.writer.write_call(&name, n_args)?,
+                    Command::Return => self.writer.write_return()?,
                 }
             }
         }
@@ -37,6 +47,12 @@ impl<W: std::io::Write> VmTranslator<W> {
 pub(crate) enum Command {
     PushPop(PushPopCommand),
     Arithmetic(ArithmeticCommand),
+    Label(String),
+    GoTo(String),
+    IfGoTo(String),
+    Function { name: String, n_args: u16 },
+    Call { name: String, n_args: u16 },
+    Return,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
