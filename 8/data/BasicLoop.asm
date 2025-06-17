@@ -146,6 +146,6 @@ M=D
 @SP
 M=M+1
 A=M
-(BasicLoop.END)
-@BasicLoop.END
+(BasicLoop.FUNCTION_FINISH_LABEL)
+@BasicLoop.FUNCTION_FINISH_LABEL
 0;JMP

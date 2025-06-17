@@ -41,7 +41,7 @@ impl<W: std::io::Write> CodeWriter<W> {
 
     pub fn finalize(&mut self) -> std::io::Result<()> {
         // プログラム終了のためのコード
-        let tag = format!("{}.END", self.ident);
+        let tag = format!("{}.FUNCTION_FINISH_LABEL", self.ident);
         writeln!(self.output, "({})", tag)?;
         writeln!(self.output, "@{}", tag)?;
         writeln!(self.output, "0;JMP")?;
