@@ -30,8 +30,8 @@ impl<W: std::io::Write> VmTranslator<W> {
                     }
                     Command::GoTo(label) => self.writer.write_goto(&label)?,
                     Command::IfGoTo(label) => self.writer.write_if_goto(&label)?,
-                    Command::Function { name, n_args } => {
-                        self.writer.write_function(&name, n_args)?
+                    Command::Function { name, n_vars } => {
+                        self.writer.write_function(&name, n_vars)?
                     }
                     Command::Call { name, n_args } => self.writer.write_call(&name, n_args)?,
                     Command::Return => self.writer.write_return()?,
@@ -50,7 +50,7 @@ pub(crate) enum Command {
     Label(String),
     GoTo(String),
     IfGoTo(String),
-    Function { name: String, n_args: u16 },
+    Function { name: String, n_vars: u16 },
     Call { name: String, n_args: u16 },
     Return,
 }

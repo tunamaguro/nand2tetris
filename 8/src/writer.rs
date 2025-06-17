@@ -223,16 +223,116 @@ impl<W: std::io::Write> CodeWriter<W> {
         Ok(())
     }
 
-    pub(crate) fn write_function(&mut self, name: &str, n_args: u16) -> std::io::Result<()> {
-        todo!()
+    pub(crate) fn write_function(&mut self, name: &str, n_vars: u16) -> std::io::Result<()> {
+        // 関数のラベルをつける
+        writeln!(self.output, "({}.{})", self.ident, name)?;
+        self.function_names.push(name.to_string());
+
+        // LCLを初期化
+        for i in 0..n_vars {
+            writeln!(self.output, "@LCL")?;
+            writeln!(self.output, "D=M")?;
+            writeln!(self.output, "@{}", i)?;
+            writeln!(self.output, "A=D+A")?;
+            writeln!(self.output, "M=0")?;
+        }
+
+        Ok(())
     }
 
     pub(crate) fn write_call(&mut self, name: &str, n_args: u16) -> std::io::Result<()> {
-        todo!()
+        // 戻りのラベル
+        let return_label = format!(
+            "{}.RET_{}",
+            self.function_name(),
+            self.increment_jmp_count()
+        );
+
+        // 戻りのラベルをスタックにプッシュ
+        writeln!(self.output, "@{}", return_label)?;
+        writeln!(self.output, "D=A")?;
+        self.set_stack_top()?;
+        writeln!(self.output, "M=D")?;
+        self.advance_stack()?;
+
+        // LCL, ARG, THIS, THAT をスタックにプッシュ
+        for seg in &["LCL", "ARG", "THIS", "THAT"] {
+            writeln!(self.output, "@{}", seg)?;
+            writeln!(self.output, "D=M")?;
+            self.set_stack_top()?;
+            writeln!(self.output, "M=D")?;
+            self.advance_stack()?;
+        }
+
+        // ARGを設定
+        writeln!(self.output, "@SP")?;
+        writeln!(self.output, "D=M")?;
+        writeln!(self.output, "@{}", 5 - n_args)?;
+        writeln!(self.output, "D=D-A")?;
+        writeln!(self.output, "@ARG")?;
+        writeln!(self.output, "M=D")?;
+
+        // LCLを設定
+        writeln!(self.output, "@SP")?;
+        writeln!(self.output, "D=M")?;
+        writeln!(self.output, "@LCL")?;
+        writeln!(self.output, "M=D")?;
+
+        // 関数を呼び出す
+        writeln!(self.output, "@{}.{}", self.ident, name)?;
+        writeln!(self.output, "0;JMP")?;
+
+        // 戻りラベル
+        writeln!(self.output, "({})", return_label)?;
+        Ok(())
     }
 
     pub(crate) fn write_return(&mut self) -> std::io::Result<()> {
-        todo!()
+        // R13に戻りアドレスを保存
+        writeln!(self.output, "@LCL")?;
+        writeln!(self.output, "D=M")?;
+        writeln!(self.output, "@R5")?;
+        writeln!(self.output, "A=D-A")?;
+        writeln!(self.output, "D=M")?;
+        writeln!(self.output, "@R13")?;
+        writeln!(self.output, "M=D")?;
+
+        // ARGに現在のスタックトップにある値=返値を設定
+        self.backward_stack()?;
+        writeln!(self.output, "D=M")?;
+        writeln!(self.output, "@ARG")?;
+        writeln!(self.output, "A=M")?;
+        writeln!(self.output, "M=D")?;
+
+        // スタックポインタARG+1にする=上の返値がスタックのトップに来る
+        writeln!(self.output, "@ARG")?;
+        writeln!(self.output, "D=M+1")?;
+        writeln!(self.output, "@SP")?;
+        writeln!(self.output, "M=D")?;
+
+        // 各値の復元
+        for (i, seg) in ["THAT", "THIS", "ARG", "LCL"].iter().enumerate() {
+            // フレームの先頭
+            writeln!(self.output, "@LCL")?;
+            // フレームから戻りのレジスタ値をDレジスタに設定
+            writeln!(self.output, "D=M")?;
+            writeln!(self.output, "@{}", i + 1)?;
+            writeln!(self.output, "A=D-A")?;
+            writeln!(self.output, "D=M")?;
+
+            writeln!(self.output, "@{}", seg)?;
+            writeln!(self.output, "M=D")?;
+        }
+
+        // 戻りアドレスをR13からAレジスタに設定
+        writeln!(self.output, "@R13")?;
+        writeln!(self.output, "A=M")?;
+        writeln!(self.output, "0;JMP")?;
+
+        // 関数から抜ける
+        self.function_names.pop();
+
+        Ok(())
     }
 
     /// 指定されたセグメントを指すようにAレジスタを設定する

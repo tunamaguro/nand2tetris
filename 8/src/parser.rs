@@ -68,13 +68,13 @@ fn parse_function(line: &str) -> Option<Command> {
     }
 
     let name = parts.next()?;
-    let n_args = parts.next()?.parse::<u16>().ok()?;
+    let n_vars = parts.next()?.parse::<u16>().ok()?;
     if parts.next().map(is_not_comment).unwrap_or(false) {
         return None; // Ensure no extra parts are present
     }
     Some(Command::Function {
         name: name.to_string(),
-        n_args,
+        n_vars,
     })
 }
 
